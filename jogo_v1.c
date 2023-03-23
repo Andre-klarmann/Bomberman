@@ -1,6 +1,7 @@
 #include "raylib.h"
 #define SCREEN_WIDTH 1190
 #define SCREEN_HEIGHT 910
+#define FPS 60
 #define BMAN_WIDTH 45
 #define BMAN_HEIGHT 65
 #define VELOCIDADE 4
@@ -10,6 +11,7 @@
 #define BLOCO 70
 #define N_BLOCOS 35
 #define N_MUROS 5
+#define N_INIMIGOS 2
 
 typedef struct
 {
@@ -59,21 +61,24 @@ typedef struct
 void GameOver (int gameover);
 void Pause (int *pause);
 void FillBlocks (Rectangle blocos[N_BLOCOS], int gameArray[X][Y]);
-void GenWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y]);
+void RandWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y]);
+short GenWall (WALL *muro, int x, int y, int gameArray[X][Y]);
 //Funcoes de inimigos:
-short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int tam);
-void MoveEnemy (ENEMY enemyList[2], BOMBERMAN bomberman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], float velocidade);
+void RandEnemy (ENEMY enemyList[], int len, int gameArray[X][Y]);
+short GenEnemy (ENEMY *enemy, int x, int y, int gameArray[X][Y]);
+short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int len);
+void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], float speed);
 //Funcoes de bomba:
 void DropBomb (BOMB bombList[], int tam, BOMBERMAN bomberman);
 short PositionBomb (BOMB *bomb, BOMBERMAN bomberman);
 //Funcoes de movimento dos personagens:
-short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int tamE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS]);
+short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS]);
 void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WALL muros[N_MUROS], float velocidade);
 void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL muros[N_MUROS], float velocidade);
 void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL muros[N_MUROS], float velocidade);
 void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL muros[N_MUROS], float velocidade);
 //Funcoes de desenho:
-void DrawEnemy (ENEMY enemyList[], int tam, Texture2D tex);
+void DrawEnemy (ENEMY enemyList[N_INIMIGOS], int len, Texture2D tex);
 void DrawRecs (Rectangle listRec[], int tam);
 void DrawBomb (BOMB bombList[], int tam, Texture2D bombTex);
 void DrawWalls (WALL muros[N_MUROS], int tam, Texture2D tex);
@@ -89,7 +94,7 @@ int main (void)
     Texture2D bomberman_png, bomb_active_png, bloco_png, enemy_png, wall_png;
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "bomberman");
-    SetTargetFPS(60);
+    SetTargetFPS(FPS);
     GetFontDefault();
 
     //Texturas
@@ -104,8 +109,7 @@ int main (void)
 
     BOMB bombList[3]={};//Lista teste de bombas
 
-    ENEMY enemyList[2]={{{600, 350, BMAN_WIDTH+5, BMAN_HEIGHT-10}, 1},
-                        {{420, 350, BMAN_WIDTH+5, BMAN_HEIGHT-10}, 1}};//Lista teste de inimigos
+    ENEMY enemyList[N_INIMIGOS]={};//Lista teste de inimigos
 
     //Paredes do cenario
     Rectangle sides[SIDES]={
@@ -119,7 +123,8 @@ int main (void)
     //Blocos do cenario
     Rectangle blocos[N_BLOCOS];
     FillBlocks (blocos, gameArray);
-    GenWalls(muros, N_MUROS, gameArray);
+    RandWalls(muros, N_MUROS, gameArray);
+    RandEnemy(enemyList, N_INIMIGOS, gameArray);
 
     //Loop do jogo
     while (!WindowShouldClose())
@@ -131,10 +136,10 @@ int main (void)
             bombermanpos.y=bomberman.rec.y;
 
             //Movimento do bomberman e controle game over
-            gameover=PlayerMovement (&bomberman, enemyList, 2, sides, blocos, muros);
+            gameover=PlayerMovement (&bomberman, enemyList, N_INIMIGOS, sides, blocos, muros);
 
             //Movimento dos inimigos
-            MoveEnemy(enemyList, bomberman, blocos, sides, muros, 1.0f);
+            MoveEnemy(enemyList, N_INIMIGOS, bomberman, blocos, sides, muros, 1.0f);
 
             //Checa se deve posicionar uma bomba
             DropBomb(bombList, 3, bomberman);
@@ -150,7 +155,7 @@ int main (void)
         DrawBlocoTex(blocos, bloco_png);
         DrawWalls(muros, N_MUROS, wall_png);
         DrawBomb (bombList, 3, bomb_active_png);
-        DrawEnemy (enemyList, 2, enemy_png);
+        DrawEnemy (enemyList, N_INIMIGOS, enemy_png);
         DrawFPS(10, 10);
         DrawRectangleRec(bomberman.rec, BLANK);
         DrawTextureEx (bomberman_png, bombermanpos, 0, 0.3, WHITE);
@@ -233,7 +238,7 @@ void FillBlocks (Rectangle blocos[N_BLOCOS], int gameArray[X][Y])
 }
 
 //Funcao gera muros aleatoriamente
-void GenWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y])
+void RandWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y])
 {
     int i, rx, ry, positioned;
     
@@ -246,30 +251,76 @@ void GenWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y])
             rx=GetRandomValue(1, X);
             ry=GetRandomValue(1, Y);
             
-            if (gameArray[rx][ry]==0)
-            {
-                muros[i].rec.x = rx * BLOCO;
-                muros[i].rec.y = ry * BLOCO;
-                muros[i].rec.width = BLOCO;
-                muros[i].rec.height = BLOCO;
-                muros[i].status = 1;
-                
-                gameArray[rx][ry]=1;
-                
-                positioned=1;
-            }    
+            positioned=GenWall (&muros[i], rx, ry, gameArray);
         }
     }
 }
 
+//Funcao que inicia os dados de um muros
+short GenWall (WALL *muro, int x, int y, int gameArray[X][Y])
+{
+    if (gameArray[x][y]==0)
+    {
+        (*muro).rec.x = x * BLOCO;
+        (*muro).rec.y = y * BLOCO;
+        (*muro).rec.width = BLOCO;
+        (*muro).rec.height = BLOCO;
+        (*muro).status = 1;
+                
+        gameArray[x][y]=1;
+                
+        return 1;
+    }
+    else
+        return 0;
+}
+
 //Funcoes de inimigos:
+//Funcao gera inimigos aleatoriamente
+void RandEnemy (ENEMY enemyList[], int len, int gameArray[X][Y])
+{
+    int i, rx, ry, positioned;
+    
+    for (i=0; i<len; i++)
+    {
+        positioned=0;
+        
+        while (!positioned)
+        {
+            rx=GetRandomValue(1, X);
+            ry=GetRandomValue(1, Y);
+            
+            positioned=GenEnemy(&enemyList[i], rx, ry, gameArray);
+        }  
+    }
+}
+
+//Funcao que inicia os dados de um inimigos
+short GenEnemy (ENEMY *enemy, int x, int y, int gameArray[X][Y])
+{
+    if (gameArray[x][y]==0)
+    {
+        (*enemy).rec.x=x * BLOCO;
+        (*enemy).rec.y=y * BLOCO;
+        (*enemy).rec.width = BMAN_WIDTH;
+        (*enemy).rec.height = BMAN_HEIGHT;
+        (*enemy).status = 1;
+                
+        gameArray[x][y]=1;
+        
+        return 1;
+    }
+    else
+        return 0;
+}
+
 //Funcao checa colisao com um vetor de inimigos
-short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int tam)
+short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int len)
 {
     int i=0;
     short collision=0;
 
-    while (i<tam && !collision)
+    while (i<len && !collision)
     {
         if (CheckCollisionRecs (bmanRect, enemyList[i].rec) && enemyList[i].status)
         {
@@ -283,23 +334,23 @@ short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int tam)
 }
 
 //Funcao movimenta os inimigos:
-void MoveEnemy (ENEMY enemyList[2], BOMBERMAN bomberman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], float velocidade)
+void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], float speed)
 {
     int i;
 
-    for (i=0; i<2; i++)
+    for (i=0; i<len; i++)
     {
-        if (enemyList[i].rec.x < bomberman.rec.x)
-            MoveRight(&enemyList[i].rec, blocos, sides[0], muros, velocidade);
+        if (enemies[i].rec.x < bman.rec.x)
+            MoveRight(&enemies[i].rec, blocos, sides[0], muros, speed);
         
-        if (enemyList[i].rec.x > bomberman.rec.x)
-            MoveLeft(&enemyList[i].rec, blocos, sides[1], muros, velocidade);
+        if (enemies[i].rec.x > bman.rec.x)
+            MoveLeft(&enemies[i].rec, blocos, sides[1], muros, speed);
         
-        if (enemyList[i].rec.y > bomberman.rec.y)
-            MoveUp(&enemyList[i].rec, blocos, sides[0], muros, velocidade);
+        if (enemies[i].rec.y > bman.rec.y)
+            MoveUp(&enemies[i].rec, blocos, sides[0], muros, speed);
         
-        if (enemyList[i].rec.y < bomberman.rec.y)
-            MoveDown(&enemyList[i].rec, blocos, sides[0], muros, velocidade);
+        if (enemies[i].rec.y < bman.rec.y)
+            MoveDown(&enemies[i].rec, blocos, sides[0], muros, speed);
     }
 }
 
@@ -329,8 +380,8 @@ short PositionBomb (BOMB *bomb, BOMBERMAN bomberman)
 
    if ((*bomb).status==0)
    {
-        (*bomb).rec.x =((int) (bomberman.rec.x + BMAN_WIDTH - 10)/70) * 70;
-        (*bomb).rec.y =((int) (bomberman.rec.y + BMAN_HEIGHT - 15)/70) * 70;
+        (*bomb).rec.x =((int) (bomberman.rec.x + BMAN_WIDTH/2)/BLOCO) * BLOCO;
+        (*bomb).rec.y =((int) (bomberman.rec.y + BMAN_HEIGHT/2)/BLOCO) * BLOCO;
         (*bomb).rec.width=BLOCO;
         (*bomb).rec.height=BLOCO;
         (*bomb).status=1;
@@ -343,11 +394,11 @@ short PositionBomb (BOMB *bomb, BOMBERMAN bomberman)
 
 //Funcoes de movimento dos personagens:
 //Funcao controla o movimento do bomberman e colisoes
-short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int tamE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS])
+short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS])
 {
     short game=1;
 
-    if (!CheckCollisionEnemy ((*bomberman).rec, enemyList, tamE))
+    if (!CheckCollisionEnemy ((*bomberman).rec, enemyList, lenE))
     {
         if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
             MoveRight (&(*bomberman).rec, blocos, sides[0], muros, VELOCIDADE);
@@ -484,14 +535,14 @@ void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL
 
 //Funcoes de desenho:
 //Funcao desenha inimigos
-void DrawEnemy (ENEMY enemyList[], int tam, Texture2D tex)
+void DrawEnemy (ENEMY enemyList[N_INIMIGOS], int len, Texture2D tex)
 {
     int i;
     Vector2 pos={};
 
     BeginDrawing();
 
-    for (i=0; i<tam; i++)
+    for (i=0; i<len; i++)
     {
         if (enemyList[i].status)
         {
