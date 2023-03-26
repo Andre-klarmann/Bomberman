@@ -60,6 +60,20 @@ typedef struct
     
 }WALL;
 
+typedef enum
+{
+    muro,
+    porta
+    
+}STATUSPORTA;
+
+typedef struct
+{
+    Rectangle rec;
+    STATUSPORTA status;
+    
+}DOOR;
+
 //Funcoes de jogo:
 void GameOver (int gameover);
 void Pause (int *pause);
@@ -68,6 +82,8 @@ void FillBlocks (Rectangle blocos[N_BLOCOS], int gameArray[X][Y]);
 void RandWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y]);
 short GenWall (WALL *muro, int x, int y, int gameArray[X][Y]);
 void BreakWalls (Rectangle explosions[BOOM], BOMBERMAN *bman, WALL muros[], int len);
+void GenDoor (DOOR *door, int gameArray[X][Y]);
+void StatusDoor (DOOR *door, ENEMY enemyList[], int len);
 //Funcoes de inimigos:
 void RandEnemy (ENEMY enemyList[], int len, int gameArray[X][Y]);
 short GenEnemy (ENEMY *enemy, int x, int y, int gameArray[X][Y]);
@@ -93,6 +109,7 @@ void DrawRecs (Rectangle listRec[], int tam);
 void DrawBomb (BOMB bombList[], int tam, Texture2D bombTex);
 void DrawExplosions (Rectangle explosions[BOOM]);
 void DrawWalls (WALL muros[N_MUROS], int tam, Texture2D tex);
+void DrawDoor (DOOR door, Texture2D wallTex, Texture2D doorTex);
 void DrawBlocoTex (Rectangle blocos[], Texture2D tex);
 
 
@@ -105,7 +122,7 @@ int main (void)
     double time=0.0d;
     float timer=0.0f;
 
-    Texture2D bomberman_png, bomb_active_png, bloco_png, enemy_png, wall_png;
+    Texture2D bomberman_png, bomb_active_png, bloco_png, enemy_png, wall_png, door_png;
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "bomberman");
     SetTargetFPS(FPS);
@@ -117,6 +134,7 @@ int main (void)
     bloco_png = LoadTexture ("Block.png");
     enemy_png = LoadTexture ("enemy.png");
     wall_png = LoadTexture ("Wall.png");
+    door_png = LoadTexture ("Door.png");
 
     BOMBERMAN bomberman={{BLOCO + 1, BLOCO + 1, BMAN_WIDTH, BMAN_HEIGHT}, 3, 0};
     Vector2 bombermanpos={};
@@ -124,6 +142,8 @@ int main (void)
     BOMB bombList[N_BOMBAS]={};//Lista teste de bombas
 
     ENEMY enemyList[N_INIMIGOS]={};//Lista teste de inimigos
+    
+    DOOR door={};
 
     //Paredes do cenario
     Rectangle sides[SIDES]={
@@ -138,6 +158,7 @@ int main (void)
     Rectangle blocos[N_BLOCOS];
     FillBlocks (blocos, gameArray);
     RandWalls(muros, N_MUROS, gameArray);
+    GenDoor(&door, gameArray);
     RandEnemy(enemyList, N_INIMIGOS, gameArray);
 
     //Loop do jogo
@@ -163,6 +184,9 @@ int main (void)
             //Checa se deve explodir as bombas posicionadas
             ExplodeBombs (bombList, N_BOMBAS, &bomberman, enemyList, N_INIMIGOS, muros, N_MUROS, &gameover, &timer);
             
+            //Checa se deve mudar o status da porta
+            StatusDoor (&door, enemyList, N_INIMIGOS);
+            
         }
 
         //Comeco do desenho
@@ -172,7 +196,7 @@ int main (void)
         DrawRecs (blocos, N_BLOCOS);
         DrawBlocoTex(blocos, bloco_png);
         DrawWalls(muros, N_MUROS, wall_png);
-        
+        DrawDoor (door, wall_png, door_png);
         DrawEnemy (enemyList, N_INIMIGOS, enemy_png);
         DrawRectangleRec(bomberman.rec, BLANK);
         DrawTextureEx (bomberman_png, bombermanpos, 0, 0.3, WHITE);
@@ -302,6 +326,42 @@ short GenWall (WALL *muro, int x, int y, int gameArray[X][Y])
     }
     else
         return 0;
+}
+
+//Funcao a posicao da porta aleatoriamente
+void GenDoor (DOOR *door, int gameArray[X][Y])
+{
+    int positioned=0, rx, ry;
+    
+    while (!positioned)
+    {
+        rx=GetRandomValue(1, X);
+        ry=GetRandomValue(1, Y);
+        
+        if (gameArray[rx][ry]==0)
+        {
+            door->rec.x=rx*BLOCO;
+            door->rec.y=ry*BLOCO;
+            door->rec.width=BLOCO;
+            door->rec.height=BLOCO;
+            positioned=1;
+        }
+    }    
+}
+
+//Funcao muda o status da porta
+void StatusDoor (DOOR *door, ENEMY enemyList[], int len)
+{
+    int i, enemiesLeft=0;
+    
+    for (i=0; i<len; i++)
+    {
+        if (enemyList[i].status==1)
+            enemiesLeft=1;
+    }
+    
+    if (!enemiesLeft)
+        door->status=porta;
 }
 
 //Funcoes de inimigos:
@@ -745,6 +805,22 @@ void DrawWalls (WALL muros[N_MUROS], int tam, Texture2D tex)
             
             DrawTextureEx (tex, pos, 0, 0.44, WHITE);
         }
+    }
+}
+
+//Funcao desenha a porta
+void DrawDoor (DOOR door, Texture2D wallTex, Texture2D doorTex)
+{
+    BeginDrawing();
+    Vector2 pos={door.rec.x, door.rec.y};
+    
+    if (door.status==muro)
+    {
+        DrawTextureEx (wallTex, pos, 0, 0.44, WHITE);
+    }
+    else if (door.status==porta)
+    {
+        DrawTextureEx (doorTex, pos, 0, 0.44, WHITE);
     }
 }
 
