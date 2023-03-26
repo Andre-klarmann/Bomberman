@@ -88,7 +88,7 @@ void StatusDoor (DOOR *door, ENEMY enemyList[], int len);
 void RandEnemy (ENEMY enemyList[], int len, int gameArray[X][Y]);
 short GenEnemy (ENEMY *enemy, int x, int y, int gameArray[X][Y]);
 short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int len);
-void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], int lenW, float speed);
+void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], int lenW, DOOR door, float speed);
 void KillEnemies (Rectangle explosions[BOOM], BOMBERMAN *bman, ENEMY enemies[], int lenE);
 //Funcoes de bomba:
 void DropBomb (BOMB bombList[], int tam, BOMBERMAN bomberman, int *bombs);
@@ -97,12 +97,13 @@ void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], 
 void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, short *gameover, float *timer);
 void ExplodeBomberman (BOMBERMAN *bomberman, Rectangle explosions[BOOM], short *gameover);
 //Funcoes de movimento dos personagens:
-short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS], int lenW);
-void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WALL muros[N_MUROS], int lenW, float velocidade);
-void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL muros[N_MUROS], int lenW, float velocidade);
-void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL muros[N_MUROS], int lenW, float velocidade);
-void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL muros[N_MUROS], int lenW, float velocidade);
+short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS], int lenW, DOOR door);
+void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade);
+void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade);
+void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade);
+void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade);
 void CheckCollisionWalls (Rectangle rec, WALL muros[N_MUROS], int len, short *collision);
+void CheckCollisionDoor (Rectangle rec, DOOR door, short *collision);
 //Funcoes de desenho:
 void DrawEnemy (ENEMY enemyList[N_INIMIGOS], int len, Texture2D tex);
 void DrawRecs (Rectangle listRec[], int tam);
@@ -173,10 +174,10 @@ int main (void)
             bombermanpos.y=bomberman.rec.y;
 
             //Movimento do bomberman e controle game over
-            gameover=PlayerMovement (&bomberman, enemyList, N_INIMIGOS, sides, blocos, muros, N_MUROS);
+            gameover=PlayerMovement (&bomberman, enemyList, N_INIMIGOS, sides, blocos, muros, N_MUROS, door);
 
             //Movimento dos inimigos
-            MoveEnemy(enemyList, N_INIMIGOS, bomberman, blocos, sides, muros, N_MUROS, 1.0f);
+            MoveEnemy(enemyList, N_INIMIGOS, bomberman, blocos, sides, muros, N_MUROS, door, 1.0f);
 
             //Checa se deve posicionar uma bomba
             DropBomb(bombList, N_BOMBAS, bomberman, &bombs);
@@ -446,23 +447,23 @@ short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int len)
 }
 
 //Funcao movimenta os inimigos:
-void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], int lenW, float speed)
+void MoveEnemy (ENEMY enemies[N_INIMIGOS], int len, BOMBERMAN bman, Rectangle blocos[N_BLOCOS], Rectangle sides[SIDES], WALL muros[N_MUROS], int lenW, DOOR door, float speed)
 {
     int i;
 
     for (i=0; i<len; i++)
     {
         if (enemies[i].rec.x < bman.rec.x)
-            MoveRight(&enemies[i].rec, blocos, sides[0], muros, lenW, speed);
+            MoveRight(&enemies[i].rec, blocos, sides[0], muros, lenW, door, speed);
         
         if (enemies[i].rec.x > bman.rec.x)
-            MoveLeft(&enemies[i].rec, blocos, sides[1], muros, lenW, speed);
+            MoveLeft(&enemies[i].rec, blocos, sides[1], muros, lenW, door, speed);
         
         if (enemies[i].rec.y > bman.rec.y)
-            MoveUp(&enemies[i].rec, blocos, sides[0], muros, lenW, speed);
+            MoveUp(&enemies[i].rec, blocos, sides[0], muros, lenW, door, speed);
         
         if (enemies[i].rec.y < bman.rec.y)
-            MoveDown(&enemies[i].rec, blocos, sides[0], muros, lenW, speed);
+            MoveDown(&enemies[i].rec, blocos, sides[0], muros, lenW, door, speed);
     }
 }
 
@@ -590,23 +591,23 @@ void ExplodeBomberman (BOMBERMAN *bomberman, Rectangle explosions[BOOM], short *
 
 //Funcoes de movimento dos personagens:
 //Funcao controla o movimento do bomberman e colisoes
-short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS], int lenW)
+short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS], int lenW, DOOR door)
 {
     short game=1;
 
     if (!CheckCollisionEnemy ((*bomberman).rec, enemyList, lenE))
     {
         if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D))
-            MoveRight (&(*bomberman).rec, blocos, sides[0], muros, lenW, VELOCIDADE);
+            MoveRight (&(*bomberman).rec, blocos, sides[0], muros, lenW, door, VELOCIDADE);
 
         if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A))
-            MoveLeft (&(*bomberman).rec, blocos, sides[1], muros, lenW, VELOCIDADE);
+            MoveLeft (&(*bomberman).rec, blocos, sides[1], muros, lenW, door, VELOCIDADE);
 
         if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_W))
-            MoveUp (&(*bomberman).rec, blocos, sides[2], muros, lenW, VELOCIDADE);
+            MoveUp (&(*bomberman).rec, blocos, sides[2], muros, lenW, door, VELOCIDADE);
 
         if (IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_S))
-            MoveDown (&(*bomberman).rec, blocos, sides[3], muros, lenW, VELOCIDADE);
+            MoveDown (&(*bomberman).rec, blocos, sides[3], muros, lenW, door, VELOCIDADE);
     }
         else
             game=0;
@@ -615,7 +616,7 @@ short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectang
 }
 
 //Funcao movimenta o bomberman para a direita
-void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WALL muros[N_MUROS], int lenW, float velocidade)
+void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade)
 {
     short collision=0;
     int i=0;
@@ -630,13 +631,14 @@ void MoveRight (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideR, WAL
     }
     
     CheckCollisionWalls (recRight, muros, lenW, &collision);
+    CheckCollisionDoor (recRight, door, &collision);
 
     if (!collision)
         (*rec).x += velocidade;
 }
 
 //Funcao movimenta o bomberman para a esquerda
-void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL muros[N_MUROS], int lenW, float velocidade)
+void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade)
 {
     short collision=0;
     int i=0;
@@ -651,6 +653,7 @@ void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL
     }
     
     CheckCollisionWalls (recLeft, muros, lenW, &collision);
+    CheckCollisionDoor (recLeft, door, &collision);
 
     if (!collision)
         (*rec).x -= velocidade;
@@ -658,7 +661,7 @@ void MoveLeft (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideL, WALL
 }
 
 //Funcao movimenta o bomberman para cima
-void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL muros[N_MUROS], int lenW, float velocidade)
+void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade)
 {
     short collision=0;
     int i=0;
@@ -673,13 +676,14 @@ void MoveUp (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideU, WALL m
     }
     
     CheckCollisionWalls (recUp, muros, lenW, &collision);
+    CheckCollisionDoor (recUp, door, &collision);
 
     if (!collision)
         (*rec).y -= velocidade;
 }
 
 //Funcao movimenta o bomberman para baixo
-void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL muros[N_MUROS], int lenW, float velocidade)
+void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL muros[N_MUROS], int lenW, DOOR door, float velocidade)
 {
     short collision=0;
     int i=0;
@@ -694,6 +698,7 @@ void MoveDown (Rectangle *rec, Rectangle blocos[N_BLOCOS], Rectangle sideD, WALL
     }
     
     CheckCollisionWalls (recDown, muros, lenW, &collision);
+    CheckCollisionDoor (recDown, door, &collision);
 
     if (!collision)
         (*rec).y += velocidade;
@@ -716,6 +721,15 @@ void CheckCollisionWalls (Rectangle rec, WALL muros[N_MUROS], int len, short *co
     }
 }
 
+//Funcao checa colisao com a porta
+void CheckCollisionDoor (Rectangle rec, DOOR door, short *collision)
+{
+    if (!*collision)
+    {
+        if (CheckCollisionRecs(rec, door.rec))
+            *collision=1;
+    }
+}
 
 //Funcoes de desenho:
 //Funcao desenha inimigos
