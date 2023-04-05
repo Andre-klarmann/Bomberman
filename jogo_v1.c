@@ -71,7 +71,8 @@ typedef struct
 typedef enum
 {
     muro,
-    porta
+    porta,
+    encontrada
 
 }STATUSPORTA;
 
@@ -87,16 +88,20 @@ typedef struct
     char name[STR];
     float points;
     double time;
+    
 }PLAYERFILE;
 
 //Funcoes de jogo:
 void GameLoop (BOMBERMAN *bomberman);
 void LevelPassed (short *gameState, int *level);
 void GetName (char name[STR], int *namePos, short *gameState);
-void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player);
-void PrintFile (PLAYERFILE player, BOMBERMAN *bman, short *gameState, int *level, double *time);
+void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player, PLAYERFILE ranking[RANKING]);
+void BubbleSort (PLAYERFILE ranking[RANKING]);
+void PrintFile (PLAYERFILE ranking[RANKING], BOMBERMAN *bman, short *gameState, int *level, double *time);
 void GenLevel
 (short *game, int level, BOMBERMAN *bman, ENEMY enemies[], int *nEnemies, BOMB bombs[], int *nBombs, int *bombsLeft, WALL muros[], int *nWalls, DOOR *door, int array[X][Y]);
+void ResetWalls (WALL muros[N_MUROS]);
+void ResetEnemies(ENEMY enemyList[N_INIMIGOS]);
 void ResetArray (int gameArray[X][Y]);
 void FillArray (int gameArray[X][Y]);
 int IncrInt (int i, int incr, int limit);
@@ -104,11 +109,12 @@ void GameOver (short *gameState, int *level, double *time, BOMBERMAN *bomberman)
 void ResetLevel (short *gameState);
 void Restart (short *gameState, int *level, double *time, BOMBERMAN *bomberman);
 void Pause (int *pause);
-void GameInfo (BOMBERMAN bomberman, int level, int bombs, double time);
+void GameInfo (BOMBERMAN bomberman, DOOR door, int level, int bombs, double time);
 void FillBlocks (Rectangle blocos[N_BLOCOS], int gameArray[X][Y]);
 void RandWalls (WALL muros[N_MUROS], int tam, int gameArray[X][Y]);
 short GenWall (WALL *muro, int x, int y, int gameArray[X][Y]);
 void BreakWalls (Rectangle explosions[BOOM], BOMBERMAN *bman, WALL muros[], int len);
+void FindDoor (Rectangle explosions[SIDES], DOOR *door);
 void GenDoor (DOOR *door, int gameArray[X][Y]);
 void StatusDoor (DOOR *door, ENEMY enemyList[], int len);
 //Funcoes de inimigos:
@@ -121,8 +127,8 @@ void KillEnemies (Rectangle explosions[BOOM], BOMBERMAN *bman, ENEMY enemies[], 
 void ResetBombs (BOMB bombList[], int tam);
 void DropBomb (BOMB bombList[], int tam, BOMBERMAN bomberman, int *bombs);
 short PositionBomb (BOMB *bomb, BOMBERMAN bomberman);
-void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, short *gameover, float *timer);
-void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, short *gameover, float *timer);
+void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, DOOR *door, short *gameover, float *timer);
+void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, DOOR *door, short *gameover, float *timer);
 void ExplodeBomberman (BOMBERMAN *bomberman, Rectangle explosions[BOOM], short *gameover);
 //Funcoes de movimento dos personagens:
 short PlayerMovement (BOMBERMAN *bomberman, ENEMY enemyList[], int lenE, Rectangle sides[], Rectangle blocos[], WALL muros[N_MUROS], int lenW, DOOR door);
@@ -226,7 +232,7 @@ void GameLoop (BOMBERMAN *bomberman)
             DropBomb(bombList, nBombs, *bomberman, &bombsLeft);
 
             //Checa se deve explodir as bombas posicionadas
-            ExplodeBombs (bombList, nBombs, bomberman, enemyList, nEnemies, muros, nWalls, &gameState, &timer);
+            ExplodeBombs (bombList, nBombs, bomberman, enemyList, nEnemies, muros, nWalls, &door, &gameState, &timer);
 
             //Checa se deve mudar o status da porta
             StatusDoor (&door, enemyList, nEnemies);
@@ -251,11 +257,11 @@ void GameLoop (BOMBERMAN *bomberman)
         Pause(&pause);
         LevelPassed(&gameState, &level);
         GameOver(&gameState, &level, &time, bomberman);
-        GameInfo(*bomberman, level, bombsLeft, time);
+        GameInfo(*bomberman, door, level, bombsLeft, time);
 
         GetName(bomberman->name, &namePos, &gameState);
-        RankingFile(*bomberman, time, &gameState, &player);
-        PrintFile(player, bomberman, &gameState, &level, &time);
+        RankingFile(*bomberman, time, &gameState, &player, ranking);
+        PrintFile(ranking, bomberman, &gameState, &level, &time);
 
         EndDrawing();
 
@@ -318,9 +324,10 @@ void GetName (char name[STR], int *namePos, short *gameState)
 }
 
 //Funcao abre o arquivo e escreve as informacoes
-void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player)
+void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player, PLAYERFILE ranking[RANKING])
 {
     FILE *arqBin;
+    int i;
     arqBin= fopen("ranking.bin", "a+b");
 
     if (*gameState==5)
@@ -333,10 +340,21 @@ void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE
             DrawText("FILE COULD NOT OPEN", 10, 10, 50, RAYWHITE);
         else
         {
-            fwrite(player->name, sizeof(player->name +1), 1, arqBin);
-            fwrite(&player->points, sizeof(player->points), 1, arqBin);
-            fwrite(&player->time, sizeof(player->time), 1, arqBin);
+            fwrite(&player->name, sizeof(STR), 1, arqBin);
+            fwrite(&player->points, sizeof(float), 1, arqBin);
+            fwrite(&player->time, sizeof(double), 1, arqBin);
+            
+            rewind(arqBin);
 
+        }
+        for (i=0; i<RANKING; i++)
+        {
+            if (!feof(arqBin))
+            {
+                fread(&ranking[i].name, sizeof(STR), 1, arqBin);
+                fread(&ranking[i].points, sizeof(float), 1, arqBin);
+                fread(&ranking[i].time, sizeof(double), 1, arqBin);
+            }
         }
 
         if (IsKeyPressed(KEY_ENTER))
@@ -346,29 +364,62 @@ void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE
     fclose(arqBin);
 }
 
-//Funcao escreve as informacoes do arquivo na tela
-void PrintFile (PLAYERFILE player, BOMBERMAN *bman, short *gameState, int *level, double *time)
+//Funcao se ordenacao do vetor com o ranking por bubble sort
+void BubbleSort (PLAYERFILE ranking[RANKING])
 {
-    FILE *arqBin;
-    if (*gameState==6)
+    int i, j;
+    PLAYERFILE aux={};
+    
+    for (i=0; i<RANKING-1; i++)
     {
-        arqBin=fopen("ranking.bin", "r");
-
-         while(!feof(arqBin))
-            if(fread(&player,sizeof(PLAYERFILE),1,arqBin) == 1)
+        for (j=0; j<RANKING-1; j++)
+        {
+            if (ranking[j].points < ranking[j+1].points)
             {
-
-                DrawText(TextFormat("%s", player.name), 10, 10, 50, BLACK);
-                DrawText(TextFormat("%.f", player.points), 300, 10, 50, BLACK);
-                DrawText(TextFormat("%.f", player.time), 500, 10, 50, BLACK);
-
-            fclose(arqBin);
+                strcpy(aux.name, ranking[j].name);
+                aux.points=ranking[j].points;
+                aux.time=ranking[j].time;
+            
+                strcpy(ranking[j].name, ranking[j+1].name);
+                ranking[j].points=ranking[j+1].points;
+                ranking[j].time=ranking[j+1].time;
+            
+                strcpy(ranking[j+1].name, aux.name);
+                ranking[j+1].points=aux.points;
+                ranking[j+1].time=aux.time;
             }
-    if (IsKeyPressed(KEY_ENTER))
-    {
-        Restart(gameState, level, time, bman);
+        }
     }
 }
+
+//Funcao escreve as informacoes do arquivo na tela
+void PrintFile (PLAYERFILE ranking[RANKING], BOMBERMAN *bman, short *gameState, int *level, double *time)
+{
+    int i, Posx=10;
+    
+    BubbleSort(ranking);
+    
+    if (*gameState==6)
+    {        
+        for (i=0; i<RANKING; i++)
+        {
+            DrawText(TextFormat("%s", ranking[i].name), 10, Posx, 50, RED);
+            DrawText(TextFormat("%.f", ranking[i].points), 300, Posx, 50, RED);
+            DrawText(TextFormat("%.f", ranking[i].time), 500, Posx, 50, RED);
+            
+            Posx+=50;
+        }
+        DrawText("PRESS SPACE TO CONTINUE", 10, Posx, 50, WHITE);
+        if(IsKeyPressed(KEY_SPACE))
+        {
+            *gameState=7;
+        }
+    }
+    if (*gameState==7)
+    {
+        DrawText("PRESS R TO RESTART", SCREEN_WIDTH/2-MeasureText("PRESS R TO RESTART", 50)/2, SCREEN_HEIGHT/2+50, 50, RAYWHITE);
+        Restart(gameState, level, time, bman);
+    }
 }
 
 //Funcao que cria a nova fase
@@ -389,11 +440,35 @@ void GenLevel
 
         ResetArray(array);
         GenDoor (door, array);
+        ResetWalls(muros);
         RandWalls(muros, *nWalls, array);
+        ResetEnemies(enemies);
         RandEnemy(enemies, *nEnemies, array);
         ResetBombs (bombs, *nBombs);
 
         *game=1;
+    }
+}
+
+//Funcao reinicia os muros do cenario
+void ResetWalls (WALL muros[N_MUROS])
+{
+    int i;
+    
+    for (i=0; i<N_MUROS; i++)
+    {
+        muros[i].status=0;
+    }
+}
+
+//Funcao reinicia os inimigos do jogo
+void ResetEnemies(ENEMY enemyList[N_INIMIGOS])
+{
+    int i;
+    
+    for (i=0; i<N_INIMIGOS; i++)
+    {
+        enemyList[i].status=morto;
     }
 }
 
@@ -499,11 +574,14 @@ void Pause (int *pause)
     if (*pause==-1)
     {
         DrawText("PAUSED", SCREEN_WIDTH/2-MeasureText("PAUSED", 100)/2, SCREEN_HEIGHT/2-50, 100, RAYWHITE);
+        DrawText("arrows or wasd : move Bomberman", SCREEN_WIDTH/2-MeasureText("arrows or wasd : move Bomberman", 50)/2, SCREEN_HEIGHT/2+100, 50, RAYWHITE);
+        DrawText("space : drop bomb", SCREEN_WIDTH/2-MeasureText("space : drop bomb", 50)/2, SCREEN_HEIGHT/2+150, 50, RAYWHITE);
+        DrawText("enter : explode bombs", SCREEN_WIDTH/2-MeasureText("enter : explode bombs", 50)/2, SCREEN_HEIGHT/2+200, 50, RAYWHITE);
     }
 }
 
 //Imprime as informacoes do jogo na tela
-void GameInfo (BOMBERMAN bomberman, int level, int bombs, double time)
+void GameInfo (BOMBERMAN bomberman, DOOR door, int level, int bombs, double time)
 {
     int min=(int)time/60;
     int sec=(int)time%60;
@@ -512,6 +590,11 @@ void GameInfo (BOMBERMAN bomberman, int level, int bombs, double time)
     DrawText (TextFormat("POINTS %.f", bomberman.points), 10, 10, 25, BLACK);
     DrawText (TextFormat("TIME %02d:%02d", min, sec), 10, 45, 25, BLACK);
     DrawText (TextFormat("LEVEL %d", level), SCREEN_WIDTH/2 - MeasureText("LEVEL %d", 50)/2, 10, 50, BLACK);
+    
+    if (door.status==encontrada)
+    {
+        DrawText("DOOR LOCKED", SCREEN_WIDTH/2-MeasureText("PAUSED", 100)/2, SCREEN_HEIGHT-50, 50, BLACK);
+    }
 }
 
 //Funcao preenche o vetor de blocos
@@ -686,6 +769,22 @@ void BreakWalls (Rectangle explosions[BOOM], BOMBERMAN *bman, WALL muros[], int 
     }
 }
 
+//Funcao encontra a porta com as bombas
+void FindDoor (Rectangle explosions[SIDES], DOOR *door)
+{
+    int i=0, collision=0;
+    
+    while (i<BOOM && !collision)
+    {
+        if (CheckCollisionRecs(explosions[i], door->rec))
+        {
+            door->status=encontrada;
+        }
+        
+        i++;
+    }
+}
+
 //Funcao checa colisao com um vetor de inimigos
 short CheckCollisionEnemy (Rectangle bmanRect, ENEMY enemyList[], int len)
 {
@@ -769,7 +868,7 @@ void DropBomb (BOMB bombList[], int tam, BOMBERMAN bomberman, int *bombs)
     short dropped=0;
 
     if (IsKeyPressed (KEY_SPACE))
-    {
+    {        
         while (i<tam && !dropped)
         {
 
@@ -803,7 +902,7 @@ short PositionBomb (BOMB *bomb, BOMBERMAN bomberman)
 }
 
 //Funcao explode as bombas ja posicionadas
-void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, short *gameover, float *timer)
+void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, DOOR *door, short *gameover, float *timer)
 {
     int i;
 
@@ -818,14 +917,14 @@ void ExplodeBombs (BOMB bombList[], int lenB, BOMBERMAN *bman, ENEMY enemies[], 
         {
             if (bombList[i].status==ativa || bombList[i].status==explodindo)
             {
-                DetonateBomb(&bombList[i], bman, enemies, lenE, muros, lenW, gameover, timer);
+                DetonateBomb(&bombList[i], bman, enemies, lenE, muros, lenW, door, gameover, timer);
             }
         }
     }
 }
 
 //Funcao explode uma bomba individualmente
-void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, short *gameover, float *timer)
+void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL muros[], int lenW, DOOR *door, short *gameover, float *timer)
 {
     Rectangle explosions[BOOM]=
     {{bomb->rec.x, bomb->rec.y, BLOCO, BLOCO},
@@ -838,12 +937,13 @@ void DetonateBomb (BOMB *bomb, BOMBERMAN *bman, ENEMY enemies[], int lenE, WALL 
     {
         KillEnemies (explosions, bman, enemies, lenE);
         BreakWalls (explosions, bman, muros, lenW);
+        FindDoor(explosions, door);
         ExplodeBomberman (bman, explosions, gameover);
         bomb->status=explodindo;
     }
 
 
-    if (*timer<0.0f)
+    if (*timer<=0)
         bomb->status=detonada;
 
     DrawExplosions (explosions);
@@ -1006,7 +1106,7 @@ void CheckCollisionDoor (Rectangle rec, DOOR door, short *collision, short *game
 {
     if (!*collision)
     {
-        if (door.status==muro && CheckCollisionRecs(rec, door.rec))
+        if ((door.status==muro || door.status==encontrada) && CheckCollisionRecs(rec, door.rec))
             *collision=1;
         else if (door.status==porta && CheckCollisionRecs(rec, door.rec))
             *game=2;
@@ -1114,7 +1214,7 @@ void DrawDoor (DOOR door, Texture2D wallTex, Texture2D doorTex)
     {
         DrawTextureEx (wallTex, pos, 0, 0.44, WHITE);
     }
-    else if (door.status==porta)
+    else if (door.status==porta || door.status==encontrada)
     {
         DrawTextureEx (doorTex, pos, 0, 0.44, WHITE);
     }
