@@ -1,6 +1,10 @@
 #include "raylib.h"
+#include <stdio.h>
+#include <string.h>
 #define SCREEN_WIDTH 1190
 #define SCREEN_HEIGHT 910
+#define STR 21
+#define RANKING 10
 #define FPS 60
 #define VIDAS 3
 #define BMAN_WIDTH 45
@@ -9,7 +13,7 @@
 #define KILL_POINTS 100
 #define SIDES 4
 #define BOOM 5
-#define X 16
+#define X 15
 #define Y 11
 #define BLOCO 70
 #define N_TEXTURAS 6
@@ -23,6 +27,7 @@ typedef struct
     Rectangle rec;
     int lives;
     float points;
+    char name[STR];
 
 }BOMBERMAN;
 
@@ -77,9 +82,19 @@ typedef struct
     
 }DOOR;
 
+typedef struct
+{
+    char name[STR];
+    float points;
+    double time;
+}PLAYERFILE;
+
 //Funcoes de jogo:
 void GameLoop (BOMBERMAN *bomberman);
 void LevelPassed (short *gameState, int *level);
+void GetName (char name[STR], int *namePos, short *gameState);
+void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player);
+void PrintFile (PLAYERFILE player, BOMBERMAN *bman, short *gameState, int *level, double *time);
 void GenLevel 
 (short *game, int level, BOMBERMAN *bman, ENEMY enemies[], int *nEnemies, BOMB bombs[], int *nBombs, int *bombsLeft, WALL muros[], int *nWalls, DOOR *door, int array[X][Y]);
 void ResetArray (int gameArray[X][Y]);
@@ -139,6 +154,7 @@ int main (void)
 void GameLoop (BOMBERMAN *bomberman)
 {
     int level=1;
+    int namePos=0;
     short gameState=1;
     int gameArray[X][Y]={};
     int pause=1;
@@ -146,8 +162,11 @@ void GameLoop (BOMBERMAN *bomberman)
     int nWalls=level+4;
     int nBombs=level+2;
     int nEnemies=level+1;
-    double time=0.0d;
-    float timer=0.0f;
+    double time=0;
+    float timer=0;
+    
+    PLAYERFILE player={};
+    PLAYERFILE ranking[RANKING]={};
 
     Texture2D bomberman_png, bomb_active_png, bloco_png, enemy_png, wall_png, door_png;
 
@@ -213,8 +232,6 @@ void GameLoop (BOMBERMAN *bomberman)
             StatusDoor (&door, enemyList, nEnemies);
             
         }
-        if (IsKeyPressed(KEY_J))
-            gameState=2;
         
         GenLevel (&gameState, level, bomberman, enemyList, &nEnemies, bombList, &nBombs, &bombsLeft, muros, &nWalls, &door, gameArray);
 
@@ -235,6 +252,10 @@ void GameLoop (BOMBERMAN *bomberman)
         LevelPassed(&gameState, &level);
         GameOver(&gameState, &level, &time, bomberman);
         GameInfo(*bomberman, level, bombsLeft, time);
+        
+        GetName(bomberman->name, &namePos, &gameState);
+        RankingFile(*bomberman, time, &gameState, &player);
+        PrintFile(player, bomberman, &gameState, &level, &time);
 
         EndDrawing();
 
@@ -264,6 +285,78 @@ void LevelPassed (short *gameState, int *level)
             *level+=1;
             *gameState=3;
         }
+    }
+}
+
+//Funcao recebe o nome inserido do usuario
+void GetName (char name[STR], int *namePos, short *gameState)
+{
+    int letter=0;
+    
+    if (*gameState==4)
+    {
+        DrawText("ENTER YOUR NAME", SCREEN_WIDTH/2-MeasureText("ENTER YOUR NAME", 100)/2, SCREEN_HEIGHT/2-50, 100, RAYWHITE);
+        DrawText(TextFormat("%s", name), SCREEN_WIDTH/2-MeasureText("          ", 50)/2, SCREEN_HEIGHT/2+50, 50, RAYWHITE);
+        letter=GetCharPressed();
+                
+        if (letter != 0)    
+        {   
+            name[*namePos]=(char)letter;
+            name[*namePos +1]='\0';
+            *namePos+=1;    
+                
+            letter=0;
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && namePos>0)
+        {
+            *namePos-=1;
+            name[*namePos]='\0';
+        }
+        if (IsKeyPressed(KEY_ENTER))
+            *gameState=5;
+    }
+}
+
+//Funcao abre o arquivo e escreve as informacoes
+void RankingFile (BOMBERMAN bomberman, double time, short *gameState, PLAYERFILE *player)
+{
+    FILE *arq;
+    
+    
+    if (*gameState==5)
+    {
+        strcpy(player->name, bomberman.name);
+        player->points=bomberman.points;
+        player->time=time;
+        
+        if (!fopen("ranking.bin", "a+b"))
+            DrawText("FILE COULD NOT OPEN", 10, 10, 50, RAYWHITE);
+        else
+        {
+            fwrite(player, sizeof(PLAYERFILE), 1, arq);
+            fread(player, sizeof(PLAYERFILE), 1, arq);
+            
+        }
+        
+        if (IsKeyPressed(KEY_ENTER))
+            *gameState=6;
+    }
+    
+    fclose(arq);
+}
+
+//Funcao escreve as informacoes do arquivo na tela
+void PrintFile (PLAYERFILE player, BOMBERMAN *bman, short *gameState, int *level, double *time)
+{
+    if (*gameState==6)
+    {
+        DrawText(TextFormat("%s", player.name), 10, 10, 50, BLACK);
+        DrawText(TextFormat("%.f", player.points), 300, 10, 50, BLACK);
+        DrawText(TextFormat("%.f", player.time), 500, 10, 50, BLACK);
+    }
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        Restart(gameState, level, time, bman);
     }
 }
 
@@ -346,17 +439,17 @@ void GameOver (short *gameState, int *level, double *time, BOMBERMAN *bomberman)
     {
 
         DrawText("GAME OVER", SCREEN_WIDTH/2-MeasureText("GAME OVER", 100)/2, SCREEN_HEIGHT/2-50, 100, RAYWHITE);
+        DrawText ("PRESS C TO CONTINUE", SCREEN_WIDTH/2-MeasureText("PRESS C TO CONTINUE", 50)/2, SCREEN_HEIGHT/2+50, 50, RAYWHITE);
         
         if (bomberman->lives==0)
-        {
-            DrawText ("PRESS R TO RESTART", SCREEN_WIDTH/2-MeasureText("PRESS R TO RESTART", 50)/2, SCREEN_HEIGHT/2+50, 50, RAYWHITE);
+        {            
+            if (IsKeyPressed (KEY_C))
+                *gameState=4;
             
             Restart (gameState, level, time, bomberman);
         }
         else
-        {
-            DrawText ("PRESS C TO CONTINUE", SCREEN_WIDTH/2-MeasureText("PRESS C TO CONTINUE", 50)/2, SCREEN_HEIGHT/2+50, 50, RAYWHITE);
-            
+        {            
             ResetLevel (gameState);
         }
     }
